@@ -1,0 +1,59 @@
+name: Exercise workflow
+
+on:
+  repository_dispatch:
+    branches: master
+  workflow_dispatch:
+    branches: master
+  push:
+    branches: master
+    paths:
+      - exercice.py
+      - README.md
+      - logs/*
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Exercise workflow
+
+        run: |
+          source settings/variables.txt
+          firebase_real_time_db_url="${{ secrets.FIREBASE_DB_URL }}"
+          
+          if [[ "$GITHUB_REPOSITORY" != "$template_repo_fullname" ]]
+          then
+            function show_grades_in_readme() {
+              # Create tests results
+              python3 "$test_file"
+              # Create grades from tests
+              python3 -m classroom_tools.grading.create_grades \
+                --test_associations_path="$test_associations_path"
+              # Update README
+              python3 -m classroom_tools.grading.show_grades_in_readme
+              # Push modifications
+              git config --local user.email "action@github.com"
+              git config --local user.name "GitHub Action"
+              git add logs/tests_results.txt
+              git add logs/grades.json
+              git add README.md
+              git commit -a -m "Updated autograding results"
+              git pull -v --rebase=true
+              git push -v
+            }
+          
+            function patch_db() {
+              python3 -m classroom_tools.grading.patch_db \
+                --access_token="" \
+                --firebase_real_time_db_url="$firebase_real_time_db_url" \
+                --github_repo="$(basename $(pwd))"
+            }
+            
+            python3 -m pip install -q setuptools
+            python3 -m pip install -q git+"$classroom_tools_url"
+            show_grades_in_readme
+            patch_db
+          fi
